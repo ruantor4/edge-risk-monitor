@@ -24,8 +24,13 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
+    handlers=[
+        logging.StreamHandler(sys.stdout),                     # terminal
+        logging.FileHandler("logs/edge-risk-monitor.log",      # ARQUIVO
+                            encoding="utf-8"),
+    ],
 )
+
 
 
 def log_system(level: int, message: str, **context: Any) -> None:
