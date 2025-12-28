@@ -1,5 +1,6 @@
-*.log
 *.dev
 *.pyc
 __pycache__/
 .venv/
+*.pt
+*.log
