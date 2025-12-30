@@ -10,14 +10,7 @@ Responsabilidades:
 - Filtrar classes de interesse
 - Retornar resultado estruturado da detecção
 
-Não responsabilidades:
-- Não captura imagens
-- Não salva evidências
-- Não envia eventos
-- Não cria diretórios
-- Não controla fluxo da aplicação
 """
-
 from typing import Dict, Any, Optional
 from pathlib import Path
 import logging

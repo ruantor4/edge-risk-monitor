@@ -2,11 +2,11 @@
 main.py
 
 Edge Risk Monitor:
-- Webcam
-- Detector YOLO
-- Bounding box
-- Debounce temporal (anti-piscada)
-- Envio de evento (edge → API)
+- Captura de webcam
+- Inferência YOLO
+- Debounce temporal
+- Geração de evidências
+- Envio de eventos via API
 """
 
 from pathlib import Path
@@ -16,52 +16,66 @@ from datetime import datetime
 
 import cv2
 
+from config.settings import (
+    CAMERA_INDEX,
+    FRAME_WIDTH,
+    FRAME_HEIGHT,
+    MODEL_PATH,
+    TARGET_CLASS,
+    CONFIDENCE_THRESHOLD,
+    DETECT_FRAMES_REQUIRED,
+    CLEAR_FRAMES_REQUIRED,
+    OUTPUT_DIR,
+    API_URL,
+)
+
 from detector.detector import Detector
 from webcam.webcam import Webcam
 from sender.sender import EventSender
+from evidence.saver import EvidenceSaver
 from utils.logging_global import log_system
 from utils.system import get_mac_address
 
 
-# ==============================
-# CONFIGURAÇÕES
-# ==============================
-DETECT_FRAMES_REQUIRED = 3
-CLEAR_FRAMES_REQUIRED = 5
-
-EVIDENCE_DIR = Path("evidence/detections")
-API_URL = "http://localhost:8001/api/events/"  # mock ou API real
-
-
 def main() -> None:
+   
+    # PREPARAÇÃO DE AMBIENTE
+
     Path("logs").mkdir(exist_ok=True)
-    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     log_system(
         logging.INFO,
         "Iniciando edge-risk-monitor (inferência em tempo real)",
     )
 
-    # ==============================
+  
     # INICIALIZAÇÕES
-    # ==============================
-    webcam = Webcam(index=0, width=640, height=480)
+
+    webcam = Webcam(
+        index=CAMERA_INDEX,
+        width=FRAME_WIDTH,
+        height=FRAME_HEIGHT,
+    )
+
     if not webcam.open():
         log_system(logging.ERROR, "Falha ao inicializar webcam")
         return
 
     detector = Detector(
-        model_path=Path("models/yolo_mouse.pt"),
-        target_class="mouse",
-        confidence_threshold=0.4,
+        model_path=MODEL_PATH,
+        target_class=TARGET_CLASS,
+        confidence_threshold=CONFIDENCE_THRESHOLD,
     )
 
     sender = EventSender(api_url=API_URL)
+    saver = EvidenceSaver(output_dir=OUTPUT_DIR)
+
     mac_address = get_mac_address()
 
-    # ==============================
+  
     # ESTADO DO SISTEMA
-    # ==============================
+   
     detect_counter = 0
     clear_counter = 0
 
@@ -79,9 +93,9 @@ def main() -> None:
 
             result = detector.detect(frame)
 
-            # ==============================
-            # LÓGICA DE DETECÇÃO + DEBOUNCE
-            # ==============================
+     
+            # DETECÇÃO + DEBOUNCE
+   
             if result.get("detected"):
                 detect_counter += 1
                 clear_counter = 0
@@ -116,18 +130,14 @@ def main() -> None:
                     last_bbox = None
                     last_label = ""
 
-            # ==============================
-            # ENVIO DO EVENTO (UMA VEZ)
-            # ==============================
+
+            # ENVIO DO EVENTO
+
             if risk_active and not event_sent:
                 log_system(logging.INFO, "Disparo de evento de risco")
 
                 timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                evidence_path = (
-                    EVIDENCE_DIR / f"risk_{int(time.time())}.jpg"
-                )
-
-                cv2.imwrite(str(evidence_path), frame)
+                evidence_path = saver.save(frame)
 
                 payload = {
                     "mac": mac_address,
@@ -146,9 +156,9 @@ def main() -> None:
                 else:
                     log_system(logging.ERROR, "Falha ao enviar evento")
 
-            # ==============================
+
             # OVERLAY VISUAL
-            # ==============================
+
             if risk_active and last_bbox:
                 x1, y1, x2, y2 = map(int, last_bbox)
 

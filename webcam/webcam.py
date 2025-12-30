@@ -11,12 +11,6 @@ Responsabilidades:
 - Inicializar o dispositivo de vídeo
 - Capturar frames
 - Liberar recursos da webcam
-
-Não responsabilidades:
-- Não realiza inferência
-- Não cria diretórios
-- Não envia eventos
-- Não toma decisões de negócio
 """
 
 from typing import Optional
