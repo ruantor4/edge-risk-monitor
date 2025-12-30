@@ -49,6 +49,7 @@ edge-risk-monitor/
 ├── utils/
 │       ├── __init__.py
 │       └── logging_global.py   # Logging global do sistema
+│       └── system.py
 │
 ├── webcam/
 │       ├── __init__.py
@@ -62,13 +63,13 @@ edge-risk-monitor/
 │       ├── __init__.py
 │       └── saver.py
 │
-├── sender/                 # (futuro) Envio de eventos à API Django
+├── sender/                 # Envio de eventos à API Django
 │       ├── __init__.py
 │       └── sender.py
 │
-└── config/                 # (futuro) Configurações do sistema
-        ├── __init__.py
-        └── settings.py
+└── config/                 # (Configurações do sistema
+│        ├── __init__.py
+│        └── settings.pys
 ~~~
 
 #### Embora o backend utilize Django, o edge-risk-monitor não depende de frameworks web, mantendo-se leve, desacoplado e adequado para execução contínua em dispositivos de borda.
