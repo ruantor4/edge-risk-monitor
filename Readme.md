@@ -53,41 +53,45 @@ Nesta PoC, o objeto de risco definido é um **mouse de computador**, utilizado c
 edge-risk-monitor/
 ├── config/
 │ ├── init.py
-│ └── settings.py # Configurações centralizadas
+│ └── settings.py                              # Configurações centralizadas
 │
 ├── detector/
 │ ├── init.py
-│ └── detector.py # Inferência YOLO
+│ └── detector.py                              # Inferência YOLO
 │
 ├── webcam/
 │ ├── init.py
-│ └── webcam.py # Captura de frames
+│ └── webcam.py                                # Captura de frames
 │
 ├── evidence/
 │ ├── init.py
-│ └── saver.py # Salvamento de evidências
+│ └── saver.py                                 # Salvamento de evidências
 │
 ├── sender/
 │ ├── init.py
-│ └── sender.py # Envio de eventos via HTTP
+│ └── sender.py                                # Envio de eventos via HTTP
 │
 ├── utils/
 │ ├── init.py
-│ ├── logging_global.py # Logging global do sistema
-│ └── system.py # Funções auxiliares de sistema
+│ ├── logging_global.py                        # Logging global do sistema
+│ └── system.py                                # Funções auxiliares de sistema
 │
 ├── outputs/
-│ └── detection/ # Evidências geradas
+│ └── detection/                               # Evidências geradas
 │
 ├── logs/
-│ └── edge-risk-monitor.log # Logs da aplicação
+│ └── edge-risk-monitor.log                    # Logs da aplicação
 │
 ├── models/
-│ └── yolo_mouse.pt # Modelo YOLO treinado
+│ └── yolo_mouse.pt                            # Modelo YOLO treinado
 │
-├── main.py # Orquestração da aplicação
-├── requirements.txt # Dependências
-└── README.md # Documentação
+├── main.py                                    # Orquestração da aplicação
+│
+├── requirements.txt                           # Dependências
+│
+├── documentação_técnica_edge-risk-monitor.pdf # Documentação Técnica
+│
+└── README.md                                  # Documentação
 ```
 
 **━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
