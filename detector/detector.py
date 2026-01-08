@@ -1,16 +1,23 @@
 """
 detector.py
 
-Módulo responsável exclusivamente pela detecção de objetos de risco
-utilizando um modelo YOLO (Ultralytics) em inferência local.
+Responsável pela execução de inferência de objetos de risco
+no projeto edge-risk-monitor.
 
-Responsabilidades:
-- Carregar o modelo YOLO treinado (.pt)
-- Executar inferência sobre frames
-- Filtrar classes de interesse
-- Retornar resultado estruturado da detecção
+Este módulo encapsula exclusivamente a lógica de inferência
+utilizando um modelo YOLO (Ultralytics), operando sobre frames
+capturados em tempo real.
 
+Não realiza captura de vídeo, controle de estado, debounce
+ou despacho de eventos. Seu escopo é estritamente a detecção.
+
+Escopo:
+- Carregamento seguro do modelo YOLO treinado (.pt)
+- Execução de inferência sobre frames individuais
+- Filtragem por classe alvo e limiar de confiança
+- Retorno de resultado estruturado da detecção
 """
+
 from typing import Dict, Any, Optional
 from pathlib import Path
 import logging
@@ -34,17 +41,17 @@ class Detector:
         confidence_threshold: float = 0.5,
     ) -> None:
         """
-        Inicializa o detector.
+        Inicializa o detector de objetos de risco.
 
         Args:
             model_path (Path):
                 Caminho para o arquivo de pesos do modelo YOLO (.pt).
 
             target_class (str):
-                Nome da classe considerada objeto de risco.
+                Nome da classe considerada como objeto de risco.
 
             confidence_threshold (float):
-                Threshold mínimo de confiança para considerar
+                Limiar mínimo de confiança para considerar
                 uma detecção válida.
         """
         self.model_path = model_path
@@ -57,6 +64,13 @@ class Detector:
     def _load_model(self) -> None:
         """
         Carrega o modelo YOLO a partir do arquivo de pesos.
+
+        Realiza validação da existência do arquivo e inicializa
+        o objeto de inferência do Ultralytics YOLO.
+
+        Raises:
+            FileNotFoundError: Caso o arquivo de modelo não exista.
+            Exception: Em caso de falha na inicialização do modelo.
         """
         try:
             if not self.model_path.exists():
@@ -86,15 +100,17 @@ class Detector:
     def detect(self, frame: np.ndarray) -> Dict[str, Any]:
         """
         Executa inferência em um frame e verifica a presença
-        do objeto de risco.
+        do objeto de risco configurado.
 
         Args:
             frame (np.ndarray):
-                Frame BGR capturado pela webcam.
+                Frame BGR capturado pela câmera.
 
         Returns:
             Dict[str, Any]:
-                Resultado estruturado da detecção.
+                Estrutura contendo o resultado da detecção.
+                Quando positivo, inclui classe, confiança
+                e bounding box no espaço do frame original.
         """
         if self.model is None:
             log_system(logging.ERROR, "Modelo YOLO não inicializado")

@@ -1,14 +1,22 @@
 """
 sender.py
 
-Responsável por enviar eventos de detecção do edge-risk-monitor
-para o backend risk-monitor-api (Django REST API).
+Responsável pelo envio de eventos de detecção do projeto
+edge-risk-monitor para o backend risk-monitor-api.
 
-Este módulo:
-- Envia payload estruturado (JSON)
-- Anexa evidência (imagem)
-- Trata erros de comunicação
-- Registra logs de sucesso e falha
+Este módulo encapsula a comunicação HTTP com a API externa,
+realizando o envio de payload estruturado juntamente com
+evidências visuais associadas ao evento detectado.
+
+Não realiza validação semântica de payload, persistência
+local ou controle de estado. Seu escopo é estritamente
+o despacho de eventos para o backend.
+
+Escopo:
+- Envio de payload estruturado no formato HTTP
+- Anexação de evidência visual (imagem)
+- Tratamento de falhas de comunicação com a API
+- Registro de logs de sucesso e erro
 """
 
 from pathlib import Path
@@ -22,22 +30,27 @@ from requests import Response, RequestException
 class EventSender:
     """
     Cliente HTTP responsável por enviar eventos de detecção
-    para o risk-monitor-api.
+    para o serviço backend risk-monitor-api.
     """
 
-    def __init__(
+    def __init__( 
         self,
         api_url: str,
         timeout: int = 10,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         """
-        Inicializa o sender.
+        Inicializa o componente de envio de eventos.
 
         Args:
-            api_url (str): URL do endpoint da API.
-            timeout (int): Timeout da requisição HTTP em segundos.
-            logger (logging.Logger, optional): Logger customizado.
+            api_url (str):
+                URL do endpoint da API responsável por receber os eventos.
+
+            timeout (int):
+                Timeout máximo da requisição HTTP em segundos.
+
+            logger (logging.Logger, optional):
+                Logger utilizado para registro de eventos do módulo.
         """
         self.api_url = api_url
         self.timeout = timeout
@@ -51,12 +64,20 @@ class EventSender:
         """
         Envia um evento de detecção para o backend.
 
+        O envio consiste em um payload estruturado acompanhado
+        de um arquivo de evidência visual anexado à requisição.
+
         Args:
-            payload (Dict[str, str]): Dados do evento (mac, date, class).
-            evidence_path (Path): Caminho da imagem de evidência.
+            payload (Dict[str, str]):
+                Dados estruturados do evento de detecção.
+
+            evidence_path (Path):
+                Caminho para o arquivo de imagem da evidência.
 
         Returns:
-            bool: True se o envio foi bem-sucedido, False caso contrário.
+            bool:
+                True caso o envio seja bem-sucedido,
+                False em caso de falha.
         """
         if not evidence_path.exists():
             self.logger.error(
