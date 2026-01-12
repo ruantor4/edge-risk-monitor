@@ -1,54 +1,41 @@
 """
 logging_global.py
 
-Módulo responsável por prover a função global de logging do sistema
-edge-risk-monitor.
-
-Este módulo centraliza:
-- Configuração global do logging
-- Função log_system(), utilizada por TODOS os módulos
-
-Regras arquiteturais:
-- Nenhum outro módulo deve configurar logging
-- main.py e módulos internos apenas chamam log_system()
-- Evita dependência circular com main.py
+Infraestrutura global de logging do projeto edge-risk-monitor.
 """
 
 import logging
-import sys
-from typing import Any
+from datetime import datetime
+
+from config.settings import LOGS_DIR
 
 
-# Configuração global do logging do sistema
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.StreamHandler(sys.stdout),                     # terminal
-        logging.FileHandler("logs/edge-risk-monitor.log",      # ARQUIVO
-                            encoding="utf-8"),
-    ],
-)
-
-
-
-def log_system(level: int, message: str, **context: Any) -> None:
+def setup_logging() -> None:
     """
-    Registra mensagens de log de forma padronizada no sistema.
+    Configura o sistema de logging do projeto.
 
-    Args:
-        level (int):
-            Nível do log (logging.INFO, logging.WARNING,
-            logging.ERROR, etc).
-
-        message (str):
-            Mensagem principal a ser registrada.
-
-        **context (Any):
-            Contexto adicional estruturado que será anexado ao log.
+    Esta função deve ser chamada UMA VEZ no início do main.
+    Após isso, qualquer módulo pode utilizar logging.getLogger().
     """
-    if context:
-        message = f"{message} | context={context}"
 
-    logging.log(level, message)
+    # Garante que o diretório de logs exista
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Data atual para versionamento do arquivo de log
+    date_str = datetime.now().strftime("%Y-%m-%d")
+
+    # Arquivo de log diário
+    log_file = LOGS_DIR / f"edge-risk-monitor_{date_str}.log"
+
+    # Formato do log
+    log_format = "%(asctime)s | %(levelname)s | %(message)s"
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format=log_format,
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[
+            logging.FileHandler(log_file, encoding="utf-8"),
+            logging.StreamHandler(),
+        ],
+    )

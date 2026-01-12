@@ -1,18 +1,25 @@
 """
 main.py
 
-Edge Risk Monitor:
-- Captura de webcam
-- Inferência YOLO
-- Debounce temporal
-- Geração de evidências
-- Envio de eventos via API
+Ponto de entrada oficial do pipeline de monitoramento
+do projeto edge-risk-monitor.
+
+Responsabilidades:
+- Orquestrar a execução do monitoramento em tempo real
+- Inicializar o sistema de logging
+- Inicializar componentes centrais do sistema
+- Executar inferência, decisão de risco e envio de eventos
+  de forma determinística
+
+Este módulo NÃO implementa regras de detecção, filtros,
+persistência ou envio. Ele apenas orquestra componentes
+já validados.
 """
 
-from pathlib import Path
 import logging
 import time
 from datetime import datetime
+from pathlib import Path
 
 import cv2
 
@@ -23,143 +30,167 @@ from config.settings import (
     MODEL_PATH,
     TARGET_CLASS,
     CONFIDENCE_THRESHOLD,
-    DETECT_FRAMES_REQUIRED,
-    CLEAR_FRAMES_REQUIRED,
+    CONFIDENCE_WINDOW_SIZE,
+    RISK_CONFIRM_MEAN_THRESHOLD,
+    RISK_CLEAR_MEAN_THRESHOLD,
+    VISUAL_HOLD_FRAMES,
     OUTPUT_DIR,
     API_URL,
 )
 
-from detector.detector import Detector
-from webcam.webcam import Webcam
-from sender.sender import EventSender
-from evidence.saver import EvidenceSaver
-from utils.logging_global import log_system
 from utils.system import get_mac_address
 
+from webcam.webcam import Webcam
+from detector.detector import Detector
+from evidence.saver import EvidenceSaver
+from sender.sender import EventSender
+
+
+logger = logging.getLogger(__name__)
 
 def main() -> None:
-   
-    # PREPARAÇÃO DE AMBIENTE
+    """
+    Executa o pipeline oficial de monitoramento de risco.
+    """
 
-    Path("logs").mkdir(exist_ok=True)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    log_system(
-        logging.INFO,
-        "Iniciando edge-risk-monitor (inferência em tempo real)",
-    )
-
-  
-    # INICIALIZAÇÕES
-
-    webcam = Webcam(
-        index=CAMERA_INDEX,
-        width=FRAME_WIDTH,
-        height=FRAME_HEIGHT,
-    )
-
-    if not webcam.open():
-        log_system(logging.ERROR, "Falha ao inicializar webcam")
-        return
-
-    detector = Detector(
-        model_path=MODEL_PATH,
-        target_class=TARGET_CLASS,
-        confidence_threshold=CONFIDENCE_THRESHOLD,
-    )
-
-    sender = EventSender(api_url=API_URL)
-    saver = EvidenceSaver(output_dir=OUTPUT_DIR)
-
-    mac_address = get_mac_address()
-
-  
-    # ESTADO DO SISTEMA
-   
-    detect_counter = 0
-    clear_counter = 0
-
-    risk_active = False
-    event_sent = False
-
-    last_bbox = None
-    last_label = ""
-
+    # ====================================================
+    # ETAPA 1 – PREPARAÇÃO DO AMBIENTE E INICIALIZAÇÃO
+    # ====================================================
+    logger.info("Iniciando pipeline oficial de monitoramento de risco")
+    
     try:
+        webcam = Webcam(
+            index=CAMERA_INDEX,
+            width=FRAME_WIDTH,
+            height=FRAME_HEIGHT,
+        )
+        
+        if not webcam.open():
+            logger.error("Falha ao inicializar webcam")
+            return
+
+        detector = Detector(
+            model_path=MODEL_PATH,
+            target_class=TARGET_CLASS,
+            confidence_threshold=CONFIDENCE_THRESHOLD,
+        )
+
+        evidence_saver = EvidenceSaver(output_dir=OUTPUT_DIR)
+        event_sender = EventSender(api_url=API_URL)
+
+        mac_address = get_mac_address()
+
+        logger.info("Componentes inicializados com sucesso")
+
+        # ====================================================
+        # ETAPA 2 – ESTADO DO SISTEMA
+        # ====================================================
+
+        confidence_window: list[float] = []
+
+        risk_active = False
+        event_sent = False
+
+        last_bbox = None
+        last_label = ""
+        visual_hold_counter = 0
+
+        # ====================================================
+        # ETAPA 3 – LOOP PRINCIPAL
+        # ====================================================
+
+        logger.info("Iniciando loop principal de inferência")
+
         while True:
             frame = webcam.read()
             if frame is None:
                 continue
 
-            result = detector.detect(frame)
+            detection = detector.detect(frame)
 
-     
-            # DETECÇÃO + DEBOUNCE
-   
-            if result.get("detected"):
-                detect_counter += 1
-                clear_counter = 0
+            # ====================================================
+            # CONTROLE VISUAL
+            # ====================================================
 
-                last_bbox = result["bbox"]
+            if detection.get("detected"):
+                last_bbox = detection["bbox"]
                 last_label = (
-                    f"RISCO: {result['class_name']} "
-                    f"({result['confidence']:.2f})"
+                    f"OBJETO DE RISCO: {detection['class_name']} "
+                    f"({detection['confidence']:.2f})"
                 )
-
-                if detect_counter >= DETECT_FRAMES_REQUIRED:
-                    if not risk_active:
-                        log_system(
-                            logging.INFO,
-                            "Risco confirmado após debounce",
-                            context={
-                                "detect_counter": detect_counter,
-                                "confidence": result["confidence"],
-                            },
-                        )
-                    risk_active = True
-
+                visual_hold_counter = VISUAL_HOLD_FRAMES
             else:
-                clear_counter += 1
-                detect_counter = 0
-
-                if clear_counter >= CLEAR_FRAMES_REQUIRED:
-                    if risk_active:
-                        log_system(logging.INFO, "Risco limpo")
-                    risk_active = False
-                    event_sent = False
+                if visual_hold_counter > 0:
+                    visual_hold_counter -= 1
+                else:
                     last_bbox = None
                     last_label = ""
 
+            # ====================================================
+            # DECISÃO DE RISCO (MÉDIA)
+            # ====================================================
 
-            # ENVIO DO EVENTO
+            confidence = (
+                detection["confidence"]
+                if detection.get("detected")
+                else 0.0
+            )
+
+            confidence_window.append(confidence)
+            if len(confidence_window) > CONFIDENCE_WINDOW_SIZE:
+                confidence_window.pop(0)
+
+            mean_confidence = sum(confidence_window) / len(confidence_window)
+
+            if mean_confidence >= RISK_CONFIRM_MEAN_THRESHOLD:
+                if not risk_active:
+                    logger.info(
+                        "Risco confirmado por média de confiança",
+                        extra={"mean_confidence": mean_confidence},
+                    )
+                risk_active = True
+
+            elif mean_confidence <= RISK_CLEAR_MEAN_THRESHOLD:
+                if risk_active:
+                    logger.info(
+                        "Risco limpo por queda da confiança média",
+                        extra={"mean_confidence": mean_confidence},
+                    )
+                risk_active = False
+                event_sent = False
+
+            # ====================================================
+            # ENVIO DE EVENTO
+            # ====================================================
 
             if risk_active and not event_sent:
-                log_system(logging.INFO, "Disparo de evento de risco")
+                logger.info("Disparo de evento de risco")
 
                 timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                evidence_path = saver.save(frame)
+                evidence_path = evidence_saver.save(frame)
 
                 payload = {
                     "mac": mac_address,
                     "date": timestamp,
-                    "class": result["class_name"],
+                    "class": detection.get("class_name", ""),
                 }
 
-                success = sender.send_event(
+                success = event_sender.send_event(
                     payload=payload,
                     evidence_path=evidence_path,
                 )
 
                 if success:
-                    log_system(logging.INFO, "Evento enviado com sucesso")
+                    logger.info("Evento enviado com sucesso")
                     event_sent = True
                 else:
-                    log_system(logging.ERROR, "Falha ao enviar evento")
+                    logger.error("Falha ao enviar evento")
 
+            # ====================================================
+            # OVERLAY
+            # ====================================================
 
-            # OVERLAY VISUAL
-
-            if risk_active and last_bbox:
+            if last_bbox:
                 x1, y1, x2, y2 = map(int, last_bbox)
 
                 cv2.rectangle(
@@ -183,7 +214,7 @@ def main() -> None:
 
                 cv2.putText(
                     frame,
-                    "OBJETO DE RISCO DETECTADO",
+                    "OBJETO DE RISCO",
                     (20, 40),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     1.0,
@@ -199,10 +230,22 @@ def main() -> None:
 
             time.sleep(0.01)
 
+    except Exception as exc:
+        logger.error(
+            "Falha na execução do pipeline de monitoramento",
+            extra={"error": str(exc)},
+        )
+        raise
+
     finally:
-        webcam.release()
-        cv2.destroyAllWindows()
-        log_system(logging.INFO, "Aplicação finalizada")
+        try:
+            webcam.release()
+            cv2.destroyAllWindows()
+        
+        except Exception:
+            pass
+
+        logger.info("Pipeline oficial de monitoramento finalizado")
 
 
 if __name__ == "__main__":

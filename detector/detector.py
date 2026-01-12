@@ -1,16 +1,17 @@
 """
 detector.py
 
-Módulo responsável exclusivamente pela detecção de objetos de risco
-utilizando um modelo YOLO (Ultralytics) em inferência local.
+Responsável pela execução de inferência de objetos de risco
+no projeto edge-risk-monitor.
 
-Responsabilidades:
-- Carregar o modelo YOLO treinado (.pt)
-- Executar inferência sobre frames
-- Filtrar classes de interesse
-- Retornar resultado estruturado da detecção
+Este módulo encapsula exclusivamente a lógica de inferência
+utilizando um modelo YOLO (Ultralytics), operando sobre frames
+capturados em tempo real.
 
+Não realiza captura de vídeo, controle de estado, debounce
+ou despacho de eventos. Seu escopo é estritamente a detecção.
 """
+
 from typing import Dict, Any, Optional
 from pathlib import Path
 import logging
@@ -18,7 +19,21 @@ import logging
 import numpy as np
 from ultralytics import YOLO
 
-from utils.logging_global import log_system
+
+# ============================================================
+# >>> INÍCIO DA ALTERAÇÃO (IMPORTS DE FILTRO GEOMÉTRICO)
+# ============================================================
+
+from config.settings import (
+    FRAME_WIDTH,
+    FRAME_HEIGHT,
+    MAX_BOX_AREA,
+    MAX_BOX_WIDTH,
+    MAX_BOX_HEIGHT,
+    MIN_BOX_PROPORTION,
+    MAX_BOX_PROPORTION,
+)
+logger = logging.getLogger(__name__)
 
 
 class Detector:
@@ -34,17 +49,17 @@ class Detector:
         confidence_threshold: float = 0.5,
     ) -> None:
         """
-        Inicializa o detector.
+        Inicializa o detector YOLO.
 
         Args:
             model_path (Path):
-                Caminho para o arquivo de pesos do modelo YOLO (.pt).
+                Caminho para o arquivo do modelo YOLO treinado.
 
             target_class (str):
-                Nome da classe considerada objeto de risco.
+                Nome da classe alvo a ser monitorada.
 
             confidence_threshold (float):
-                Threshold mínimo de confiança para considerar
+                Limiar mínimo de confiança para considerar
                 uma detecção válida.
         """
         self.model_path = model_path
@@ -56,52 +71,74 @@ class Detector:
 
     def _load_model(self) -> None:
         """
-        Carrega o modelo YOLO a partir do arquivo de pesos.
+        Carrega o modelo YOLO a partir do caminho informado.
+
+        Raises:
+            FileNotFoundError:
+                Caso o arquivo do modelo não exista.
+
+            Exception:
+                Propaga qualquer erro ocorrido durante o
+                carregamento do modelo.
         """
         try:
             if not self.model_path.exists():
-                log_system(
-                    logging.ERROR,
+                logger.error(
                     "Arquivo de modelo YOLO não encontrado",
-                    path=str(self.model_path),
+                    extra={"path": str(self.model_path)},
                 )
                 raise FileNotFoundError(self.model_path)
 
             self.model = YOLO(str(self.model_path))
 
-            log_system(
-                logging.INFO,
+            logger.info(
                 "Modelo YOLO carregado com sucesso",
-                model_path=str(self.model_path),
+                extra={"model_path": str(self.model_path)},
             )
 
         except Exception as exc:
-            log_system(
-                logging.ERROR,
+            logger.error(
                 "Falha ao carregar modelo YOLO",
-                error=str(exc),
+                extra={"error": str(exc)},
             )
             raise
 
     def detect(self, frame: np.ndarray) -> Dict[str, Any]:
         """
-        Executa inferência em um frame e verifica a presença
-        do objeto de risco.
+        Executa inferência em um frame e retorna a melhor
+        evidência do objeto de risco, se existir.
+
+        A função:
+        - Executa o modelo YOLO sobre o frame
+        - Filtra detecções pela classe alvo
+        - Aplica limiar mínimo de confiança
+        - Aplica filtros geométricos normalizados
+        - Seleciona a detecção com maior confiança válida
 
         Args:
             frame (np.ndarray):
-                Frame BGR capturado pela webcam.
+                Frame capturado da webcam no formato BGR (OpenCV).
 
         Returns:
             Dict[str, Any]:
-                Resultado estruturado da detecção.
+                Dicionário contendo:
+                - detected (bool): indica se houve detecção válida
+                - class_id (int): id da classe detectada
+                - class_name (str): nome da classe detectada
+                - confidence (float): score de confiança
+                - bbox (list): bounding box [x1, y1, x2, y2]
+
+                Caso nenhuma detecção válida seja encontrada,
+                retorna {"detected": False}.
         """
         if self.model is None:
-            log_system(logging.ERROR, "Modelo YOLO não inicializado")
+            logger.error("Modelo YOLO não inicializado")
             return {"detected": False}
 
+        best_detection: Optional[Dict[str, Any]] = None
+        best_confidence: float = 0.0
+
         try:
-            # Inferência (mantém frame original)
             results = self.model(frame, imgsz=640, verbose=False)
 
             for result in results:
@@ -116,37 +153,68 @@ class Detector:
                     class_id = int(box.cls[0].cpu().numpy())
                     class_name = names.get(class_id, "unknown")
 
-                    if confidence < self.confidence_threshold:
-                        continue
-
                     if class_name != self.target_class:
                         continue
 
-                    # Bounding box JÁ no espaço do frame original
+                    if confidence < self.confidence_threshold:
+                        continue
+                    
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().tolist()
 
-                    log_system(
-                        logging.INFO,
-                        "Objeto de risco detectado",
-                        class_name=class_name,
-                        confidence=confidence,
-                        bbox=[x1, y1, x2, y2],
-                    )
+                    box_width_px = x2 - x1
+                    box_height_px = y2 - y1
 
-                    return {
-                        "detected": True,
-                        "class_id": class_id,
-                        "class_name": class_name,
-                        "confidence": confidence,
-                        "bbox": [x1, y1, x2, y2],
-                    }
+                    # Normalização (0–1)
+                    box_width = box_width_px / FRAME_WIDTH
+                    box_height = box_height_px / FRAME_HEIGHT
+                    box_area = box_width * box_height
+
+                    # filtro por área máxima.
+                    if box_area > MAX_BOX_AREA:
+                        continue
+
+                    # Largura / altura máximas permitidas
+                    if box_width > MAX_BOX_WIDTH or box_height > MAX_BOX_HEIGHT:
+                        continue
+
+                    # Proporção (aspect ratio)
+                    proportion = (
+                        box_width / box_height if box_height > 0 else 0.0
+                    )
+                    if (
+                        proportion < MIN_BOX_PROPORTION
+                        or proportion > MAX_BOX_PROPORTION
+                    ):
+                        continue
+
+
+                    if confidence > best_confidence:
+                        best_confidence = confidence
+                        best_detection = {
+                            "detected": True,
+                            "class_id": class_id,
+                            "class_name": class_name,
+                            "confidence": confidence,
+                            "bbox": [x1, y1, x2, y2],
+                        }
+
+            
+            if best_detection:
+                logger.info(
+                    "Objeto de risco detectado",
+                    extra={
+                        "class_name": best_detection["class_name"],
+                        "confidence": best_detection["confidence"],
+                        "bbox": best_detection["bbox"],
+                    },
+                )
+                return best_detection
 
             return {"detected": False}
 
         except Exception as exc:
-            log_system(
-                logging.ERROR,
+            logger.error(
                 "Erro durante inferência YOLO",
-                error=str(exc),
+                extra={"error": str(exc)},
             )
             return {"detected": False}

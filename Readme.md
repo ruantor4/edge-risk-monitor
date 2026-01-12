@@ -129,21 +129,10 @@ Ao detectar um objeto de risco confirmado, o sistema envia um evento contendo:
 
 - **EVIDENCE:** Imagem da evidência capturada
 
-Os dados são enviados via **HTTP POST** para a **API** `risk-monitor-api`.
+O evento é enviado via **HTTP POST** no formato multipart/form-data, contendo payload textual e arquivo de evidência, para a **API** `risk-monitor-api`.
 
 **━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
 
-## Observações Técnicas
-
-- O sistema executa inferência local, adequado para ambientes industriais.
-
-- O debounce temporal evita múltiplos envios para o mesmo evento.
-
-- A arquitetura é desacoplada, permitindo integração com diferentes backends.
-
-- O `main.py` atua exclusivamente como orquestrador do fluxo.
-
-**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
 
 ## Execução com API Mock
 
@@ -160,3 +149,17 @@ Após iniciar o mock, o sistema pode ser executado normalmente:
 ```bash
 $ python mock/main.py
 ```
+
+**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
+
+## Observações Técnicas
+
+- O sistema executa inferência local, adequado para ambientes industriais.
+
+- A decisão temporal baseada em média de confiança reduz falsos positivos.
+
+- A arquitetura é desacoplada, permitindo integração com diferentes backends.
+
+- O `main.py` atua exclusivamente como orquestrador do fluxo.
+
+- O projeto não tem como objetivo benchmark de FPS, mas sim a confiabilidade da decisão de risco baseada em evidência temporal.
