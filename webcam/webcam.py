@@ -24,7 +24,7 @@ import logging
 import cv2
 import numpy as np
 
-from utils.logging_global import log_system
+logger = logging.getLogger(__name__)
 
 
 class Webcam:
@@ -72,26 +72,26 @@ class Webcam:
             self._cap = cv2.VideoCapture(self.index)
 
             if not self._cap.isOpened():
-                log_system(logging.ERROR, "Falha ao abrir webcam", index=self.index)
+                logger.error("Falha ao abrir webcam", index=self.index)
                 return False
 
             self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
 
-            log_system(
-                logging.INFO,
+            logger.info(
                 "Webcam inicializada",
-                index=self.index,
-                width=self.width,
-                height=self.height,
+                extra={
+                    "index": self.index,
+                    "width": self.width,
+                    "height": self.height,
+                }
             )
             return True
 
         except Exception as exc:
-            log_system(
-                logging.ERROR,
+            logger.error(
                 "Exceção ao inicializar webcam",
-                error=str(exc),
+                extra={"error": str(exc)},
             )
             return False
 
@@ -106,21 +106,20 @@ class Webcam:
         """
         try:
             if self._cap is None or not self._cap.isOpened():
-                log_system(logging.WARNING, "Webcam não inicializada")
+                logger.warning("Webcam não inicializada")
                 return None
 
             ret, frame = self._cap.read()
             if not ret:
-                log_system(logging.WARNING, "Falha ao capturar frame")
+                logger.warning("Falha ao capturar frame")
                 return None
 
             return frame
 
         except Exception as exc:
-            log_system(
-                logging.ERROR,
+            logger.info(
                 "Exceção durante captura de frame",
-                error=str(exc),
+                extra = {"error": str(exc)},
             )
             return None
 
@@ -134,10 +133,10 @@ class Webcam:
         try:
             if self._cap is not None:
                 self._cap.release()
-                log_system(logging.INFO, "Webcam liberada")
+                logger.info("Webcam liberada")
+        
         except Exception as exc:
-            log_system(
-                logging.ERROR,
+            logger.error(
                 "Exceção ao liberar webcam",
-                error=str(exc),
+                extra = {"error": str(exc)},
             )
