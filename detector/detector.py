@@ -35,7 +35,6 @@ class Detector:
     ) -> None:
         """
         Inicializa o detector YOLO.
-        Inicializa o detector YOLO.
 
         Parameters
         ----------
@@ -52,6 +51,7 @@ class Detector:
         self.confidence_threshold = confidence_threshold
         self.model: Optional[YOLO] = None
 
+        # Carrega o modelo no momento da inicialização
         self._load_model()
 
     def _load_model(self) -> None:
@@ -66,28 +66,25 @@ class Detector:
             Propaga qualquer erro ocorrido durante o carregamento.
         """
         try:
+            # Valida existência física do arquivo do modelo
             if not self.model_path.exists():
-                logger.error(
                 logger.error(
                     "Arquivo de modelo YOLO não encontrado",
                     extra={"path": str(self.model_path)},
                 )
                 raise FileNotFoundError(self.model_path)
 
+            # Inicializa o modelo YOLO
             self.model = YOLO(str(self.model_path))
 
             logger.info(
-            logger.info(
                 "Modelo YOLO carregado com sucesso",
-                extra={"model_path": str(self.model_path)},
                 extra={"model_path": str(self.model_path)},
             )
 
         except Exception as exc:
             logger.error(
-            logger.error(
                 "Falha ao carregar modelo YOLO",
-                extra={"error": str(exc)},
                 extra={"error": str(exc)},
             )
             raise
@@ -96,12 +93,6 @@ class Detector:
     def detect(self, frame: np.ndarray) -> Dict[str, Any]:
         """
         Executa inferência em um frame e retorna a melhor detecção válida.
-
-        A inferência aplica:
-        - filtro por classe alvo
-        - limiar mínimo de confiança
-        - filtros geométricos normalizados
-        - seleção da detecção com maior confiança
 
         Parameters
         ----------
@@ -114,48 +105,51 @@ class Detector:
             Dicionário contendo os dados da detecção ou
             {"detected": False} quando nenhuma detecção válida ocorre.
         """
+        # Garante que o modelo foi corretamente inicializado
         if self.model is None:
-            logger.error("Modelo YOLO não inicializado")
             logger.error("Modelo YOLO não inicializado")
             return {"detected": False}
 
-        best_detection: Optional[Dict[str, Any]] = None
-        best_confidence: float = 0.0
-
+        # Armazena a melhor detecção válida do frame
         best_detection: Optional[Dict[str, Any]] = None
         best_confidence: float = 0.0
 
         try:
+            # Executa inferência YOLO sobre o frame
             results = self.model(frame, imgsz=640, verbose=False)
 
             for result in results:
                 boxes = result.boxes
                 names = result.names
-
+                
+                # Frame sem bounding boxes
                 if boxes is None:
                     continue
 
                 for box in boxes:
+                    # Score de confiança da detecção
                     confidence = float(box.conf[0].cpu().numpy())
+                    
+                    # Classe detectada
                     class_id = int(box.cls[0].cpu().numpy())
                     class_name = names.get(class_id, "unknown")
 
+                    # Filtra apenas a classe de interesse
                     if class_name != self.target_class:
                         continue
-
-                    if class_name != self.target_class:
-                        continue
-
+                    
+                    # Aplica limiar mínimo de confiança
                     if confidence < self.confidence_threshold:
                         continue
                     
-                    
+                    # Coordenadas absolutas da bounding box
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().tolist()
 
+                    # Dimensões da bounding box em pixels
                     box_width_px = x2 - x1
                     box_height_px = y2 - y1
 
-                    # Normalização (0–1)
+                    # Normalização das dimensões (0–1)
                     box_width = box_width_px / FRAME_WIDTH
                     box_height = box_height_px / FRAME_HEIGHT
                     box_area = box_width * box_height
@@ -168,7 +162,7 @@ class Detector:
                     if box_width > MAX_BOX_WIDTH or box_height > MAX_BOX_HEIGHT:
                         continue
 
-                    # Proporção (aspect ratio)
+                    # Filtro por proporção (aspect ratio)
                     proportion = (
                         box_width / box_height if box_height > 0 else 0.0
                     )
@@ -177,8 +171,8 @@ class Detector:
                         or proportion > MAX_BOX_PROPORTION
                     ):
                         continue
-
-
+                    
+                    # Seleciona a detecção com maior confiança válida        
                     if confidence > best_confidence:
                         best_confidence = confidence
                         best_detection = {
@@ -188,44 +182,8 @@ class Detector:
                             "confidence": confidence,
                             "bbox": [x1, y1, x2, y2],
                         }
-                    box_width_px = x2 - x1
-                    box_height_px = y2 - y1
-
-                    # Normalização (0–1)
-                    box_width = box_width_px / FRAME_WIDTH
-                    box_height = box_height_px / FRAME_HEIGHT
-                    box_area = box_width * box_height
-
-                    # filtro por área máxima.
-                    if box_area > MAX_BOX_AREA:
-                        continue
-
-                    # Largura / altura máximas permitidas
-                    if box_width > MAX_BOX_WIDTH or box_height > MAX_BOX_HEIGHT:
-                        continue
-
-                    # Proporção (aspect ratio)
-                    proportion = (
-                        box_width / box_height if box_height > 0 else 0.0
-                    )
-                    if (
-                        proportion < MIN_BOX_PROPORTION
-                        or proportion > MAX_BOX_PROPORTION
-                    ):
-                        continue
-
-
-                    if confidence > best_confidence:
-                        best_confidence = confidence
-                        best_detection = {
-                            "detected": True,
-                            "class_id": class_id,
-                            "class_name": class_name,
-                            "confidence": confidence,
-                            "bbox": [x1, y1, x2, y2],
-                        }
-
             
+            # Retorna a melhor detecção encontrada no frame
             if best_detection:
                 logger.info(
                     "Objeto de risco detectado",
@@ -236,26 +194,13 @@ class Detector:
                     },
                 )
                 return best_detection
-
             
-            if best_detection:
-                logger.info(
-                    "Objeto de risco detectado",
-                    extra={
-                        "class_name": best_detection["class_name"],
-                        "confidence": best_detection["confidence"],
-                        "bbox": best_detection["bbox"],
-                    },
-                )
-                return best_detection
-
+            # Nenhuma detecção válida
             return {"detected": False}
 
         except Exception as exc:
             logger.error(
-            logger.error(
                 "Erro durante inferência YOLO",
-                extra={"error": str(exc)},
                 extra={"error": str(exc)},
             )
             return {"detected": False}
