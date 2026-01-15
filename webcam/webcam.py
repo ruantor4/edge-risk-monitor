@@ -1,23 +1,3 @@
-"""
-webcam.py
-
-Módulo responsável exclusivamente pela captura de frames da webcam
-no projeto edge-risk-monitor.
-
-Este módulo implementa a camada de aquisição de vídeo do sistema,
-abstraindo o acesso ao dispositivo físico de captura (webcam)
-por meio da biblioteca OpenCV.
-
-Não realiza inferência, análise de risco, persistência ou envio
-de eventos. Seu escopo é estritamente a aquisição de frames.
-
-Escopo:
-- Inicialização do dispositivo de captura de vídeo
-- Captura de frames em tempo real
-- Configuração de resolução da webcam
-- Liberação controlada dos recursos do dispositivo
-"""
-
 from typing import Optional
 import logging
 
@@ -33,23 +13,21 @@ class Webcam:
 
     Esta classe encapsula o ciclo de vida do dispositivo de captura,
     incluindo abertura, leitura de frames e liberação de recursos,
-    fornecendo uma interface simples e controlada para o restante
-    do sistema.
+    fornecendo uma interface controlada para o sistema.
     """
 
     def __init__(self, index: int = 0, width: int = 640, height: int = 480) -> None:
         """
         Inicializa a abstração da webcam.
 
-        Args:
-            index (int):
-                Índice do dispositivo de vídeo utilizado.
-
-            width (int):
-                Largura do frame capturado.
-
-            height (int):
-                Altura do frame capturado.
+        Parameters
+        ----------
+        index : int
+            Índice do dispositivo de vídeo utilizado.
+        width : int
+            Largura do frame capturado.
+        height : int
+            Altura do frame capturado.
         """
         self.index = index
         self.width = width
@@ -60,19 +38,20 @@ class Webcam:
         """
         Abre e configura o dispositivo de captura de vídeo.
 
-        Inicializa a webcam, aplica as configurações de resolução
-        e valida a disponibilidade do dispositivo.
-
-        Returns:
-            bool:
-                True se a webcam foi inicializada com sucesso,
-                False caso contrário.
+        Returns
+        -------
+        bool
+            True se a webcam foi inicializada com sucesso,
+            False caso contrário.
         """
         try:
             self._cap = cv2.VideoCapture(self.index)
 
             if not self._cap.isOpened():
-                logger.error("Falha ao abrir webcam", index=self.index)
+                logger.error(
+                    "Falha ao abrir webcam",
+                    extra={"index": self.index},
+                )
                 return False
 
             self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
@@ -99,10 +78,10 @@ class Webcam:
         """
         Captura um frame da webcam.
 
-        Returns:
-            Optional[np.ndarray]:
-                Frame no formato BGR (OpenCV) ou None em caso de falha
-                ou indisponibilidade do dispositivo.
+        Returns
+        -------
+        Optional[np.ndarray]
+            Frame no formato BGR (OpenCV) ou None em caso de falha.
         """
         try:
             if self._cap is None or not self._cap.isOpened():
@@ -126,9 +105,6 @@ class Webcam:
     def release(self) -> None:
         """
         Libera os recursos associados ao dispositivo de captura.
-
-        Deve ser chamada durante o encerramento controlado
-        da aplicação para garantir liberação adequada da webcam.
         """
         try:
             if self._cap is not None:
