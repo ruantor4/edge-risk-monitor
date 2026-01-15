@@ -1,7 +1,17 @@
 """
 logging_global.py
 
-Infraestrutura global de logging do projeto edge-risk-monitor.
+Módulo responsável por prover a função global de logging do sistema
+edge-risk-monitor.
+
+Este módulo centraliza:
+- Configuração global do logging
+- Função log_system(), utilizada por TODOS os módulos
+
+Regras arquiteturais:
+- Nenhum outro módulo deve configurar logging
+- main.py e módulos internos apenas chamam log_system()
+- Evita dependência circular com main.py
 """
 
 import logging
@@ -17,7 +27,6 @@ def setup_logging() -> None:
     Esta função deve ser chamada UMA VEZ no início do main.
     Após isso, qualquer módulo pode utilizar logging.getLogger().
     """
-
     # Garante que o diretório de logs exista
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
