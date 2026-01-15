@@ -1,39 +1,22 @@
-"""
-mock_server.py
-
-Mock HTTP server para simular a API de recebimento de eventos
-do projeto edge-risk-monitor durante o desenvolvimento.
-
-Este módulo fornece um servidor HTTP simples, utilizado
-exclusivamente em ambiente de desenvolvimento e testes,
-permitindo validar o envio de eventos sem dependência
-do serviço real de backend.
-
-Não realiza validações de payload, persistência ou
-processamento de dados. Seu papel é apenas simular
-o endpoint de recebimento.
-
-Escopo:
-- Disponibilização de endpoint HTTP para requisições POST
-- Registro básico de headers e corpo das requisições recebidas
-- Simulação de resposta bem-sucedida da API externa
-"""
-
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import logging
 
 
 class MockRiskAPIHandler(BaseHTTPRequestHandler):
     """
-    Handler HTTP responsável por simular o endpoint
-    de recebimento de eventos de risco.
+    Simula o endpoint HTTP de recebimento de eventos de risco.
+
+    Este handler é utilizado exclusivamente em ambiente de
+    desenvolvimento para validar o envio de requisições HTTP
+    pelo edge sem dependência do backend real.
     """
+    
     def do_POST(self) -> None:
         """
         Manipula requisições HTTP POST recebidas pelo mock server.
 
         Lê o corpo da requisição, registra informações básicas
-        de debug e retorna uma resposta HTTP de sucesso.
+        para debug e retorna uma resposta HTTP simulando sucesso.
         """
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length)
@@ -59,15 +42,8 @@ def run(host: str = "localhost", port: int = 8001) -> None:
     """
     Inicializa e executa o mock server HTTP.
 
-    Configura o logging básico e inicia o servidor
-    escutando no host e porta informados.
-
-    Args:
-        host (str):
-            Endereço onde o servidor irá escutar.
-
-        port (int):
-            Porta onde o servidor irá escutar.
+    O servidor é iniciado com logging básico e permanece
+    escutando requisições até ser interrompido manualmente.
     """
     logging.basicConfig(
         level=logging.INFO,
