@@ -117,8 +117,8 @@ OUTPUT_DIR = BASE_DIR / "outputs" / "detection"
 API_BASE_URL = "http://127.0.0.1:8000"
 
 # Credenciais de autenticação da API
-API_USERNAME = "admin"
-API_PASSWORD = "admin"
+API_USERNAME = "root"
+API_PASSWORD = "root"
 
 # Endpoint de envio de eventos de monitoramento
 API_MONITORING_ENDPOINT = f"{API_BASE_URL}/api/monitoring/"
