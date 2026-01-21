@@ -1,9 +1,3 @@
-"""
-logging_global.py
-
-Infraestrutura global de logging do projeto edge-risk-monitor.
-"""
-
 import logging
 from datetime import datetime
 
@@ -17,7 +11,6 @@ def setup_logging() -> None:
     Esta função deve ser chamada UMA VEZ no início do main.
     Após isso, qualquer módulo pode utilizar logging.getLogger().
     """
-
     # Garante que o diretório de logs exista
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -1,23 +1,3 @@
-"""
-evidence/saver.py
-
-Responsável pelo salvamento de evidências visuais
-geradas pelo projeto edge-risk-monitor.
-
-Este módulo encapsula exclusivamente a lógica de persistência
-de frames de imagem no sistema de arquivos, atuando como
-componente de apoio à inferência e análise de risco.
-
-Não realiza inferência, controle de estado ou integração
-com APIs externas. Seu escopo é estritamente o armazenamento
-de evidências visuais.
-
-Escopo:
-- Validação do diretório de saída de evidências
-- Persistência de frames como arquivos de imagem
-- Geração de nomes de arquivos baseados em timestamp
-- Registro de logs de sucesso e falha no salvamento
-"""
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -30,18 +10,11 @@ logger = logging.getLogger(__name__)
 
 class EvidenceSaver:
     """
-    Inicializa o gerenciador de salvamento de evidências.
+    Gerencia o salvamento de evidências visuais geradas pelo edge.
 
-    Args:
-        output_dir (Path):
-            Diretório onde as evidências visuais serão armazenadas.
-
-        logger (logging.Logger, optional):
-            Logger utilizado para registro de eventos do módulo.
-
-    Raises:
-        FileNotFoundError:
-            Caso o diretório de saída de evidências não exista.
+    Esta classe é responsável exclusivamente pela persistência
+    de frames de imagem no sistema de arquivos, não realizando
+    inferência, controle de estado ou integração externa.
     """
 
     def __init__(
@@ -50,14 +23,14 @@ class EvidenceSaver:
         """
         Inicializa o gerenciador de evidências.
 
-        Args:
-            output_dir (Path): Diretório onde as evidências serão salvas.
-            logger (logging.Logger, optional): Logger do módulo.
-
-        Raises:
-            FileNotFoundError: Caso o diretório de saída não exista.
+        Parameters
+        ----------
+        output_dir : Path
+            Diretório onde as evidências visuais serão armazenadas.
         """
         self.output_dir = output_dir
+        
+        # Garante a existência do diretório de saída
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def save(self, frame) -> Path:
@@ -67,17 +40,20 @@ class EvidenceSaver:
         O arquivo é salvo utilizando um nome baseado em timestamp,
         garantindo unicidade e rastreabilidade temporal.
 
-        Args:
-            frame:
-                Frame capturado pela câmera no formato OpenCV (BGR).
+        Parameters
+        ----------
+        frame
+            Frame capturado pela câmera no formato OpenCV (BGR).
 
-        Returns:
-            Path:
-                Caminho absoluto do arquivo de evidência salvo.
+        Returns
+        -------
+        Path
+            Caminho absoluto do arquivo de evidência salvo.
 
-        Raises:
-            IOError:
-                Caso a evidência não possa ser salva no disco.
+        Raises
+        ------
+        IOError
+            Caso a evidência não possa ser salva no disco.
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         filename = f"evidence_{timestamp}.jpg"

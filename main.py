@@ -1,25 +1,6 @@
-"""
-main.py
-
-Ponto de entrada oficial do pipeline de monitoramento
-do projeto edge-risk-monitor.
-
-Responsabilidades:
-- Orquestrar a execução do monitoramento em tempo real
-- Inicializar o sistema de logging
-- Inicializar componentes centrais do sistema
-- Executar inferência, decisão de risco e envio de eventos
-  de forma determinística
-
-Este módulo NÃO implementa regras de detecção, filtros,
-persistência ou envio. Ele apenas orquestra componentes
-já validados.
-"""
-
 import logging
 import time
 from datetime import datetime
-from pathlib import Path
 
 import cv2
 
@@ -35,30 +16,34 @@ from config.settings import (
     RISK_CLEAR_MEAN_THRESHOLD,
     VISUAL_HOLD_FRAMES,
     OUTPUT_DIR,
-    API_URL,
+    API_BASE_URL,
+    API_USERNAME,
+    API_PASSWORD,
 )
 
 from utils.system import get_mac_address
+from utils.logging_global import setup_logging
+from utils.auth import authenticate
 
 from webcam.webcam import Webcam
 from detector.detector import Detector
 from evidence.saver import EvidenceSaver
 from sender.sender import EventSender
 
-
+setup_logging()
 logger = logging.getLogger(__name__)
+
 
 def main() -> None:
     """
     Executa o pipeline oficial de monitoramento de risco.
     """
-
-    # ====================================================
-    # ETAPA 1 – PREPARAÇÃO DO AMBIENTE E INICIALIZAÇÃO
-    # ====================================================
     logger.info("Iniciando pipeline oficial de monitoramento de risco")
+
+    webcam = None
     
     try:
+        # Inicializa e abre a webcam
         webcam = Webcam(
             index=CAMERA_INDEX,
             width=FRAME_WIDTH,
@@ -69,49 +54,59 @@ def main() -> None:
             logger.error("Falha ao inicializar webcam")
             return
 
+        # Inicializa o detector de objetos de risco
         detector = Detector(
             model_path=MODEL_PATH,
             target_class=TARGET_CLASS,
             confidence_threshold=CONFIDENCE_THRESHOLD,
         )
 
+        # Inicializa o gerenciador de evidências
         evidence_saver = EvidenceSaver(output_dir=OUTPUT_DIR)
-        event_sender = EventSender(api_url=API_URL)
+        
+        # Realiza autenticação na API externa
+        access_token = authenticate(
+            api_base_url=API_BASE_URL,
+            username=API_USERNAME,
+            password=API_PASSWORD,
+        )
+        
+        # Inicializa o cliente de envio de eventos
+        event_sender = EventSender(
+            api_url=f"{API_BASE_URL}/api/monitoring/",
+            access_token=access_token,
+        )
 
+        # Obtém identificador único do dispositivo edge
         mac_address = get_mac_address()
 
         logger.info("Componentes inicializados com sucesso")
 
-        # ====================================================
-        # ETAPA 2 – ESTADO DO SISTEMA
-        # ====================================================
-
+        # Janela deslizante de confiança para decisão de risco
         confidence_window: list[float] = []
 
+
+        # Estados de controle do sistema
         risk_active = False
         event_sent = False
 
+        # Estados de persistência visual
         last_bbox = None
         last_label = ""
         visual_hold_counter = 0
 
-        # ====================================================
-        # ETAPA 3 – LOOP PRINCIPAL
-        # ====================================================
-
         logger.info("Iniciando loop principal de inferência")
 
         while True:
+            # Captura frame da webcam
             frame = webcam.read()
             if frame is None:
                 continue
-
+            
+            # Executa inferência no frame atual
             detection = detector.detect(frame)
 
-            # ====================================================
-            # CONTROLE VISUAL
-            # ====================================================
-
+            # Controle de persistência visual do bounding box
             if detection.get("detected"):
                 last_bbox = detection["bbox"]
                 last_label = (
@@ -126,10 +121,7 @@ def main() -> None:
                     last_bbox = None
                     last_label = ""
 
-            # ====================================================
-            # DECISÃO DE RISCO (MÉDIA)
-            # ====================================================
-
+            # Atualiza janela de confiança para decisão de risco
             confidence = (
                 detection["confidence"]
                 if detection.get("detected")
@@ -142,6 +134,7 @@ def main() -> None:
 
             mean_confidence = sum(confidence_window) / len(confidence_window)
 
+            # Confirmação ou limpeza do estado de risco
             if mean_confidence >= RISK_CONFIRM_MEAN_THRESHOLD:
                 if not risk_active:
                     logger.info(
@@ -159,37 +152,29 @@ def main() -> None:
                 risk_active = False
                 event_sent = False
 
-            # ====================================================
-            # ENVIO DE EVENTO
-            # ====================================================
-
+            # Envia evento de risco uma única vez por ativação
             if risk_active and not event_sent:
                 logger.info("Disparo de evento de risco")
 
-                timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                timestamp = datetime.now().isoformat()
                 evidence_path = evidence_saver.save(frame)
 
                 payload = {
-                    "mac": mac_address,
-                    "date": timestamp,
-                    "class": detection.get("class_name", ""),
+                    "mac_address": mac_address,
+                    "detected_class": detection.get("class_name", ""),
+                    "detected_at": timestamp,
                 }
 
-                success = event_sender.send_event(
+                if event_sender.send_event(
                     payload=payload,
                     evidence_path=evidence_path,
-                )
-
-                if success:
+                ):
                     logger.info("Evento enviado com sucesso")
                     event_sent = True
                 else:
                     logger.error("Falha ao enviar evento")
 
-            # ====================================================
-            # OVERLAY
-            # ====================================================
-
+            # Renderização de overlay visual no frame
             if last_bbox:
                 x1, y1, x2, y2 = map(int, last_bbox)
 
@@ -225,6 +210,7 @@ def main() -> None:
 
             cv2.imshow("edge-risk-monitor", frame)
 
+            # Encerra execução ao pressionar 'q'
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
@@ -238,15 +224,16 @@ def main() -> None:
         raise
 
     finally:
-        try:
-            webcam.release()
-            cv2.destroyAllWindows()
-        
-        except Exception:
-            pass
+        # Liberação controlada dos recursos
+        if webcam:
+            try:
+                webcam.release()
+                cv2.destroyAllWindows()
+            
+            except Exception:
+                pass
 
         logger.info("Pipeline oficial de monitoramento finalizado")
-
-
+        
 if __name__ == "__main__":
     main()
